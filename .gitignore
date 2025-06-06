@@ -1,9 +1,9 @@
-config/
 results/
-pilot/
+dev/
 checkpoints/
 vectordb/
 *pycache*
+.env
 
 *.ipynb text eol=lf
 *.py     text eol=lf
