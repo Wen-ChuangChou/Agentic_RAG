@@ -2,6 +2,7 @@ results/
 dev/
 checkpoints/
 vectordb/
+.gradio
 *pycache*
 .env
 
