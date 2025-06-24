@@ -48,11 +48,11 @@ This approach is particularly effective for large-scale RAG applications where d
 Performance was evaluated using the [Hugging Face technical Q\&A dataset](https://huggingface.co/datasets/m-ric/huggingface_doc_qa_eval) with Gemini 1.5, Gemini 2.0, and Gemini 2.5 LLMs. Agentic RAG consistently demonstrated superior accuracy compared to Standard RAG across all models. The relative performance trends among the different LLMs remained consistent between Agentic RAG and Standard RAG implementations. As expected, standalone LLM models generally exhibited lower accuracy, with Gemini 1.5 showing the most significant performance deficit. Gemini 2.0 was specifically utilized to evaluate the consistency of generated answers against the ground truth in the [Hugging Face technical Q\&A dataset](https://huggingface.co/datasets/m-ric/huggingface_doc_qa_eval).
 
 
-| Model | Agentic RAG Accuracy | Standard RAG Accuracy | LLM Only Accuracy |
-|---|---|---|---|
-| Gemini-1.5-flash | 91.5% | 85.4% | 35.4% |
-| Gemini-2.0-flash | 90.8% | 85.4% | 64.1% |
-| Gemini-2.5-flash-preview-05-20 | 90.8% | 86.2% | 63.8% |
+|         Model         | Agentic RAG Accuracy | Standard RAG Accuracy | LLM Only Accuracy |
+|:---------------------:|:--------------------:|:----------------------:|:------------------:|
+|  Gemini-1.5-flash     |        91.5%         |         85.4%          |       35.4%        |
+|  Gemini-2.0-flash     |        90.8%         |         85.4%          |       64.1%        |
+| Gemini-2.5-flash-preview-05-20 |    90.8%         |         86.2%          |       63.8%        |
 
 ## **Improvement**
 
