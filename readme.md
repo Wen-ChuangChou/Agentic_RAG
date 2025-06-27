@@ -45,18 +45,43 @@ This approach is particularly effective for large-scale RAG applications where d
 
 ## **Results**
 
-Performance was evaluated using the [Hugging Face technical Q\&A dataset](https://huggingface.co/datasets/m-ric/huggingface_doc_qa_eval) with Gemini 1.5, Gemini 2.0, and Gemini 2.5 LLMs. Agentic RAG consistently demonstrated superior accuracy compared to Standard RAG across all models. The relative performance trends among the different LLMs remained consistent between Agentic RAG and Standard RAG implementations. As expected, standalone LLM models generally exhibited lower accuracy, with Gemini 1.5 showing the most significant performance deficit. Gemini 2.0 was specifically utilized to evaluate the consistency of generated answers against the ground truth in the [Hugging Face technical Q\&A dataset](https://huggingface.co/datasets/m-ric/huggingface_doc_qa_eval).
+Performance was evaluated using the [Hugging Face technical Q&A dataset](https://huggingface.co/datasets/m-ric/huggingface_doc_qa_eval) with Gemini 1.5, Gemini 2.0, and Gemini 2.5 LLMs. Agentic RAG consistently demonstrated superior accuracy compared to Standard RAG across all models. The relative performance trends among the different LLMs remained consistent between Agentic RAG and Standard RAG implementations. As expected, standalone LLM models generally exhibited lower accuracy, with Gemini 1.5 showing the most significant performance deficit. Gemini 2.0 was specifically utilized to evaluate the consistency of generated answers against the ground truth in the [Hugging Face technical Q&A dataset](https://huggingface.co/datasets/m-ric/huggingface_doc_qa_eval).
 
 
 <div align="center">
-
-| Model | Agentic RAG Accuracy | Standard RAG Accuracy | LLM Only Accuracy |
-|:---------------------:|:--------------------:|:----------------------:|:------------------:|
-| Gemini-1.5-flash      |        91.5%         |         85.4%          |       35.4%        |
-| Gemini-2.0-flash      |        90.8%         |         85.4%          |       64.1%        |
-| Gemini-2.5-flash-preview-05-20 |        90.8%         |         86.2%          |       63.8%        |
-
+  <table>
+    <thead>
+      <tr>
+        <th align="center">Model</th>
+        <th align="center">Agentic RAG</th>
+        <th align="center">Standard RAG</th>
+        <th align="center">LLM Only</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td align="center">Gemini-1.5-flash</td>
+        <td align="center">91.5%</td>
+        <td align="center">85.4%</td>
+        <td align="center">35.4%</td>
+      </tr>
+      <tr>
+        <td align="center">Gemini-2.0-flash</td>
+        <td align="center">90.8%</td>
+        <td align="center">85.4%</td>
+        <td align="center">64.1%</td>
+      </tr>
+      <tr>
+        <td align="center">Gemini-2.5-flash</td>
+        <td align="center">90.8%</td>
+        <td align="center">86.2%</td>
+        <td align="center">63.8%</td>
+      </tr>
+    </tbody>
+  </table>
 </div>
+
+<p align="center"><b>All values above are accuracy scores (in %)</b></p>
 
 ## **Improvement**
 
