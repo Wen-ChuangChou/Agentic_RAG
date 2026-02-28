@@ -6,6 +6,7 @@ doc/
 .gradio
 *pycache*
 .env
+.vscode
 
 *.ipynb text eol=lf
 *.py     text eol=lf

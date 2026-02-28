@@ -1,6 +1,7 @@
 import requests
 import json
-
+from openai import OpenAI
+from typing import Optional
 
 class Models:
 
@@ -142,3 +143,75 @@ class TokenCount:
 
         response.raise_for_status()
         return response.json()
+
+
+class BlabladorChatModel:
+    """
+    A class that initializes an API call to Helmholtz Blablador 
+    using the official OpenAI client library.
+    """
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://api.helmholtz-blablador.fz-juelich.de/v1"
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=60.0,
+            max_retries=3
+        )
+
+    def get_model_data(self):
+        response = requests.get(url=f"{self.base_url}/models",
+                                headers=self.headers)
+        response.raise_for_status()  # Raise exception for bad status codes
+        return response.json()["data"]
+
+    def get_model_fullname(self, model: str) -> str:
+        models = self.client.models.list()
+        model_ids = [model.id for model in models.data]
+        model_index = next((i for i, model_name in enumerate(model_ids) if model in model_name),None)
+        model_fullname = model_ids[model_index]
+
+        if model_index is not None:
+            print(f"Model {model_fullname} found")              
+        else:
+            raise ValueError(f"Model {model} not found")
+        return model_fullname  
+
+    def get_response(self, prompt: str, model: str = "alias-fast") -> Optional[str]:
+        """
+        Send a prompt to a specified LLM on Blablador and return its response string.
+
+        Args:
+            prompt (str): The prompt to send to the LLM.
+            model (str): The model to use for the LLM.
+
+        Returns:
+            Optional[str]: The response from the LLM.
+        """
+
+        model_fullname = self.get_model_fullname(model)
+
+        try:
+            if not prompt or not isinstance(prompt, str):
+                raise ValueError("Prompt must be a non-empty string")
+
+            response = self.client.chat.completions.create(
+                model=model_fullname,
+                messages=[{
+                    "role": "system",
+                    "content": "You are a helpful assistant."
+                }, {
+                    "role": "user",
+                    "content": prompt
+                }],
+                temperature=0.7,
+                max_tokens=500,
+                stream=False
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"An error occurred: {str(e)}")
+            return None
+
