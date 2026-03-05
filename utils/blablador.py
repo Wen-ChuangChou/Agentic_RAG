@@ -2,6 +2,7 @@ import requests
 import json
 
 
+
 class Models():
 
     def __init__(self, api_key):
@@ -11,7 +12,7 @@ class Models():
             'Authorization': f'Bearer {api_key}'
         }
 
-    url = "https://helmholtz-blablador.fz-juelich.de:8000/v1/models"
+    url = "https://api.helmholtz-blablador.fz-juelich.de/v1"
 
     def get_model_data(self):
         response = requests.get(url=self.url, headers=self.headers)
@@ -50,7 +51,8 @@ class ChatCompletions():
             'Content-Type': 'application/json'
         }
 
-    url = "https://helmholtz-blablador.fz-juelich.de:8000/v1/chat/completions"
+    # url = "https://helmholtz-blablador.fz-juelich.de:8000/v1/chat/completions"
+    url = "https://api.helmholtz-blablador.fz-juelich.de/v1/chat/completions"
 
     top_p = 1
     presence_penalty = 0
@@ -100,7 +102,8 @@ class Completions():
             'Content-Type': 'application/json'
         }
 
-    url = "https://helmholtz-blablador.fz-juelich.de:8000/v1/completions"
+    # url = "https://helmholtz-blablador.fz-juelich.de:8000/v1/completions"
+    url = "https://api.helmholtz-blablador.fz-juelich.de/v1/completions"
 
     suffix = "string"
     logprobs = 0

@@ -1,9 +1,12 @@
-config/
 results/
-pilot/
+dev/
 checkpoints/
 vectordb/
+doc/
+.gradio
 *pycache*
+.env
+.vscode
 
 *.ipynb text eol=lf
 *.py     text eol=lf
