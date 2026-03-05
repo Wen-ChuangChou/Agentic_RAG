@@ -5,7 +5,10 @@ Supports both agentic RAG and vanilla LLM testing with automatic
 checkpoint/resume on API failures or interruptions.
 
 Usage:
+    from pathlib import Path
     from utils.checkpoint_runner import run_with_checkpoint
+
+    CHECKPOINTS_DIR = Path("checkpoints")
 
     # Agentic RAG
     def agentic_answer(question):
@@ -14,7 +17,7 @@ Usage:
 
     results = run_with_checkpoint(
         eval_dataset, agentic_answer,
-        checkpoint_file="checkpoints/agentic_rag_qwen35.json",
+        checkpoint_file=CHECKPOINTS_DIR / "agentic_rag_qwen35.json",
         model_name="Qwen3.5 122B",
         prompt_name="guide_agent_system_prompt",
     )
@@ -25,25 +28,26 @@ Usage:
 
     results = run_with_checkpoint(
         eval_dataset, vanilla_answer,
-        checkpoint_file="checkpoints/vanilla_qwen35.json",
+        checkpoint_file=CHECKPOINTS_DIR / "vanilla_qwen35.json",
         model_name="Qwen3.5 122B",
         prompt_name="none",
     )
 """
 
 import json
-import os
 import time
 from datetime import datetime
-from typing import Callable, List, Optional
+from pathlib import Path
+from typing import Callable, List, Union
 
 from tqdm import tqdm
 
 
-def save_checkpoint(checkpoint_file: str, results: list, next_idx: int,
-                    model_name: str = "unknown",
+def save_checkpoint(checkpoint_file: Union[str, Path], results: list,
+                    next_idx: int, model_name: str = "unknown",
                     prompt_name: str = "unknown") -> None:
     """Save checkpoint data to file using atomic write to prevent corruption."""
+    checkpoint_file = Path(checkpoint_file)
     checkpoint_data = {
         "model_name": model_name,
         "prompt_name": prompt_name,
@@ -53,20 +57,21 @@ def save_checkpoint(checkpoint_file: str, results: list, next_idx: int,
     }
 
     # Ensure the directory exists
-    os.makedirs(os.path.dirname(checkpoint_file), exist_ok=True)
+    checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Atomic write: write to temp file first, then rename
-    temp_file = f"{checkpoint_file}.tmp"
+    temp_file = checkpoint_file.with_suffix(".tmp")
     with open(temp_file, "w", encoding="utf-8") as f:
         json.dump(checkpoint_data, f, indent=2, ensure_ascii=False)
 
     # Safely replace the old checkpoint file
-    os.replace(temp_file, checkpoint_file)
+    temp_file.replace(checkpoint_file)
 
 
-def load_checkpoint(checkpoint_file: str) -> dict:
+def load_checkpoint(checkpoint_file: Union[str, Path]) -> dict:
     """Load checkpoint data from file. Returns empty dict if not found."""
-    if not os.path.exists(checkpoint_file):
+    checkpoint_file = Path(checkpoint_file)
+    if not checkpoint_file.exists():
         return {}
 
     try:
@@ -81,7 +86,7 @@ def load_checkpoint(checkpoint_file: str) -> dict:
 def run_with_checkpoint(
     eval_dataset,
     answer_fn: Callable[[str], str],
-    checkpoint_file: str = "checkpoints/checkpoint.json",
+    checkpoint_file: Union[str, Path] = Path("checkpoints/checkpoint.json"),
     model_name: str = "unknown",
     prompt_name: str = "unknown",
     delay: float = 0,
@@ -97,7 +102,7 @@ def run_with_checkpoint(
                    an answer string. This is the core abstraction that
                    makes this function work for any backend (agentic RAG,
                    vanilla LLM, etc.).
-        checkpoint_file: Path to JSON file for storing checkpoint data.
+        checkpoint_file: Path (or str) to JSON file for checkpoint data.
         model_name: Name of the LLM model (for metadata tracking).
         prompt_name: Name of the prompt config used (for metadata tracking).
         delay: Seconds to wait between API calls (rate limiting).
@@ -106,6 +111,7 @@ def run_with_checkpoint(
         List of result dicts, each containing:
         {question, true_answer, source_doc, generated_answer}
     """
+    checkpoint_file = Path(checkpoint_file)
     results = []
     start_idx = 0
 
@@ -182,3 +188,60 @@ def run_with_checkpoint(
         pbar.close()
 
     return results
+
+
+def save_results(results_file: Union[str, Path], system_type: str,
+                 outputs: list) -> None:
+    """
+    Save one agent's generated results to a shared JSON file.
+
+    Each agent's outputs are stored under its system_type key.
+    Previously saved results for other agents are preserved.
+
+    Args:
+        results_file: Path (or str) to the shared JSON results file.
+        system_type: Key name, e.g. "agentic_rag", "standard_rag",
+                     or "standard".
+        outputs: List of result dicts (same format as run_with_checkpoint
+                 output: question, true_answer, source_doc,
+                 generated_answer).
+    """
+    results_file = Path(results_file)
+
+    # Load existing results (preserve other agents' data)
+    all_results = load_results(results_file)
+
+    # Update with this agent's outputs
+    all_results[system_type] = outputs
+
+    # Ensure directory exists
+    results_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Atomic write
+    temp_file = results_file.with_suffix(".tmp")
+    with open(temp_file, "w", encoding="utf-8") as f:
+        json.dump(all_results, f, indent=2, ensure_ascii=False)
+    temp_file.replace(results_file)
+
+    print(f"Saved {len(outputs)} results for '{system_type}' "
+          f"to {results_file}")
+
+
+def load_results(results_file: Union[str, Path]) -> dict:
+    """
+    Load all agents' results from a shared JSON file.
+
+    Returns:
+        Dict keyed by system_type, each value is a list of result dicts.
+        Returns empty dict if file doesn't exist.
+    """
+    results_file = Path(results_file)
+    if not results_file.exists():
+        return {}
+
+    try:
+        with open(results_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"Warning: Error loading results: {e}")
+        return {}
