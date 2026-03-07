@@ -245,3 +245,220 @@ def load_results(results_file: Union[str, Path]) -> dict:
     except (json.JSONDecodeError, IOError) as e:
         print(f"Warning: Error loading results: {e}")
         return {}
+
+
+# ---------------------------------------------------------------------------
+# Evaluation with checkpointing
+# ---------------------------------------------------------------------------
+
+def _extract_retry_delay(error_message: str) -> float | None:
+    """Extract retry delay from API error message (e.g. 'retry in 26.2s')."""
+    import re
+    match = re.search(r'retry in ([\d.]+)s', str(error_message))
+    if match:
+        return float(match.group(1))
+    return None
+
+
+def _is_retryable_error(error_str: str) -> bool:
+    """Check if the error is retryable (rate limit or service unavailable)."""
+    retryable_codes = ["429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"]
+    return any(code in error_str for code in retryable_codes)
+
+
+def evaluate_with_retry(evaluation_llm, messages: list,
+                        max_retries: int = 5) -> str | None:
+    """
+    Call evaluation_llm.generate() with automatic retry on transient errors
+    (429 rate limit AND 503 service unavailable).
+
+    If all retries are exhausted, raises the exception (does NOT skip).
+    """
+    for attempt in range(max_retries):
+        try:
+            return evaluation_llm.generate(messages).content
+        except Exception as e:
+            error_str = str(e)
+
+            if _is_retryable_error(error_str):
+                retry_delay = _extract_retry_delay(error_str)
+                if retry_delay is None:
+                    retry_delay = min(2 ** attempt * 10, 120)
+
+                if attempt < max_retries - 1:
+                    print(f"\nRetryable error. Waiting {retry_delay:.0f}s "
+                          f"(attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(retry_delay)
+                else:
+                    print(f"\nMax retries ({max_retries}) exhausted.")
+                    raise
+            else:
+                print(f"\nNon-retryable error: {error_str}")
+                raise
+
+    return None
+
+
+def run_evaluation_with_checkpoint(
+    system_outputs: dict,
+    evaluation_prompt: str,
+    evaluation_llm,
+    checkpoint_file: Union[str, Path] = Path("checkpoints/eval_checkpoint.json"),
+    delay: float = 5,
+    max_retries: int = 5,
+    max_consecutive_errors: int = 3,
+) -> dict:
+    """
+    Evaluate multiple systems with LLM-as-judge, with checkpointing.
+
+    If errors persist for max_consecutive_errors in a row, the loop STOPS
+    and saves checkpoint (does not skip to the next evaluation).
+
+    Args:
+        system_outputs: Dict like
+            {"agentic_rag": [...], "standard_rag": [...], "standard": [...]}
+            where each value is a list of result dicts with keys:
+            question, true_answer, source_doc, generated_answer.
+        evaluation_prompt: Prompt template with {instruction}, {response},
+            {reference_answer} placeholders.
+        evaluation_llm: The LLM model instance for evaluation.
+        checkpoint_file: Path to JSON checkpoint file.
+        delay: Seconds between API calls.
+        max_retries: Max retries per individual API call.
+        max_consecutive_errors: Stop after this many consecutive failures.
+
+    Returns:
+        Dict of evaluated outputs (same structure as system_outputs but
+        with eval_score_LLM_judge and eval_feedback_LLM_judge added).
+    """
+    checkpoint_file = Path(checkpoint_file)
+
+    # Load checkpoint
+    checkpoint = load_checkpoint(checkpoint_file)
+    evaluated = checkpoint.get("results", {})
+    progress = checkpoint.get("progress", {})
+
+    for system_type, outputs in system_outputs.items():
+        start_idx = progress.get(system_type, 0)
+
+        # Initialize evaluated list for this system if needed
+        if system_type not in evaluated:
+            evaluated[system_type] = []
+
+        if start_idx >= len(outputs):
+            print(f"'{system_type}' already fully evaluated "
+                  f"({len(outputs)} items). Skipping.")
+            continue
+
+        print(f"\n{'='*50}")
+        print(f"Evaluating {system_type} "
+              f"(starting from {start_idx}/{len(outputs)})")
+        print(f"{'='*50}")
+
+        consecutive_errors = 0
+        pbar = tqdm(total=len(outputs), initial=start_idx,
+                    desc=system_type)
+
+        try:
+            for idx in range(start_idx, len(outputs)):
+                experiment = outputs[idx].copy()
+                eval_prompt = evaluation_prompt.format(
+                    instruction=experiment["question"],
+                    response=experiment["generated_answer"],
+                    reference_answer=experiment["true_answer"],
+                )
+                messages = [
+                    {"role": "system",
+                     "content": "You are a fair evaluator language model."},
+                    {"role": "user", "content": eval_prompt},
+                ]
+
+                try:
+                    eval_result = evaluate_with_retry(
+                        evaluation_llm, messages, max_retries)
+
+                    if eval_result:
+                        try:
+                            feedback, score = [
+                                item.strip()
+                                for item in eval_result.split("[RESULT]")
+                            ]
+                            experiment["eval_score_LLM_judge"] = score
+                            experiment["eval_feedback_LLM_judge"] = feedback
+                        except ValueError:
+                            print(f"\nParsing failed: {eval_result}")
+                            experiment["eval_score_LLM_judge"] = None
+                            experiment["eval_feedback_LLM_judge"] = None
+
+                    consecutive_errors = 0  # Reset on success
+
+                except Exception as e:
+                    consecutive_errors += 1
+                    print(f"\nError at {system_type}[{idx}]: {e}")
+                    experiment["eval_score_LLM_judge"] = None
+                    experiment["eval_feedback_LLM_judge"] = None
+
+                    if consecutive_errors >= max_consecutive_errors:
+                        print(f"\n{consecutive_errors} consecutive errors. "
+                              f"Stopping evaluation.")
+                        # Save what we have so far
+                        evaluated[system_type].append(experiment)
+                        progress[system_type] = idx + 1
+                        save_checkpoint(checkpoint_file, evaluated, 0,
+                                        model_name="eval")
+                        # Also save progress
+                        _save_eval_checkpoint(
+                            checkpoint_file, evaluated, progress)
+                        pbar.close()
+                        raise RuntimeError(
+                            f"Stopped: {consecutive_errors} consecutive "
+                            f"errors at {system_type}[{idx}]. "
+                            f"Checkpoint saved. Re-run to resume."
+                        )
+
+                evaluated[system_type].append(experiment)
+                progress[system_type] = idx + 1
+
+                # Save checkpoint after each success
+                _save_eval_checkpoint(
+                    checkpoint_file, evaluated, progress)
+                pbar.update(1)
+
+                if delay > 0:
+                    time.sleep(delay)
+
+        except KeyboardInterrupt:
+            progress[system_type] = idx
+            _save_eval_checkpoint(
+                checkpoint_file, evaluated, progress)
+            pbar.close()
+            print(f"\nInterrupted. Checkpoint saved at "
+                  f"{system_type}[{idx}].")
+            return evaluated
+
+        finally:
+            pbar.close()
+
+        print(f"\nCompleted {system_type}: "
+              f"{len(evaluated[system_type])} evaluated")
+
+    print(f"\n{'='*50}")
+    print("Evaluation complete!")
+    print(f"{'='*50}")
+    return evaluated
+
+
+def _save_eval_checkpoint(checkpoint_file: Union[str, Path],
+                          evaluated: dict, progress: dict) -> None:
+    """Save evaluation checkpoint with progress tracking."""
+    checkpoint_file = Path(checkpoint_file)
+    checkpoint_data = {
+        "results": evaluated,
+        "progress": progress,
+        "timestamp": datetime.now().isoformat(),
+    }
+    checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
+    temp_file = checkpoint_file.with_suffix(".tmp")
+    with open(temp_file, "w", encoding="utf-8") as f:
+        json.dump(checkpoint_data, f, indent=2, ensure_ascii=False)
+    temp_file.replace(checkpoint_file)
