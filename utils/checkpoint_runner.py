@@ -43,8 +43,10 @@ from typing import Callable, List, Union
 from tqdm import tqdm
 
 
-def save_checkpoint(checkpoint_file: Union[str, Path], results: list,
-                    next_idx: int, model_name: str = "unknown",
+def save_checkpoint(checkpoint_file: Union[str, Path],
+                    results: list,
+                    next_idx: int,
+                    model_name: str = "unknown",
                     prompt_name: str = "unknown") -> None:
     """Save checkpoint data to file using atomic write to prevent corruption."""
     checkpoint_file = Path(checkpoint_file)
@@ -124,8 +126,7 @@ def run_with_checkpoint(
         prev_prompt = checkpoint.get("prompt_name", "unknown")
         print(
             f"Resuming from checkpoint at index {start_idx}/{len(eval_dataset)} "
-            f"({len(results)} results already processed)"
-        )
+            f"({len(results)} results already processed)")
         print(f"  Previous run: model={prev_model}, prompt={prev_prompt}")
 
     if start_idx >= len(eval_dataset):
@@ -143,7 +144,8 @@ def run_with_checkpoint(
             try:
                 answer = answer_fn(question)
 
-                print("=======================================================")
+                print(
+                    "=======================================================")
                 print(f"Question: {question}")
                 print(f"Answer: {answer}")
                 print(f'True answer: {example["answer"]}')
@@ -157,10 +159,8 @@ def run_with_checkpoint(
                 results.append(result)
 
                 # Save checkpoint after each successful question
-                save_checkpoint(
-                    checkpoint_file, results, idx + 1,
-                    model_name, prompt_name
-                )
+                save_checkpoint(checkpoint_file, results, idx + 1, model_name,
+                                prompt_name)
                 pbar.update(1)
 
                 # Optional rate limiting
@@ -169,19 +169,14 @@ def run_with_checkpoint(
 
             except Exception as e:
                 print(f"\nError at question {idx}: {e}")
-                save_checkpoint(
-                    checkpoint_file, results, idx,
-                    model_name, prompt_name
-                )
+                save_checkpoint(checkpoint_file, results, idx, model_name,
+                                prompt_name)
                 print(f"Checkpoint saved. Re-run to resume from index {idx}.")
                 raise
 
     except KeyboardInterrupt:
         print(f"\nInterrupted by user at question {idx}.")
-        save_checkpoint(
-            checkpoint_file, results, idx,
-            model_name, prompt_name
-        )
+        save_checkpoint(checkpoint_file, results, idx, model_name, prompt_name)
         print(f"Checkpoint saved. Re-run to resume from index {idx}.")
 
     finally:
@@ -251,6 +246,7 @@ def load_results(results_file: Union[str, Path]) -> dict:
 # Evaluation with checkpointing
 # ---------------------------------------------------------------------------
 
+
 def _extract_retry_delay(error_message: str) -> float | None:
     """Extract retry delay from API error message (e.g. 'retry in 26.2s')."""
     import re
@@ -266,7 +262,8 @@ def _is_retryable_error(error_str: str) -> bool:
     return any(code in error_str for code in retryable_codes)
 
 
-def evaluate_with_retry(evaluation_llm, messages: list,
+def evaluate_with_retry(evaluation_llm,
+                        messages: list,
                         max_retries: int = 5) -> str | None:
     """
     Call evaluation_llm.generate() with automatic retry on transient errors
@@ -283,7 +280,7 @@ def evaluate_with_retry(evaluation_llm, messages: list,
             if _is_retryable_error(error_str):
                 retry_delay = _extract_retry_delay(error_str)
                 if retry_delay is None:
-                    retry_delay = min(2 ** attempt * 10, 120)
+                    retry_delay = min(2**attempt * 10, 120)
 
                 if attempt < max_retries - 1:
                     print(f"\nRetryable error. Waiting {retry_delay:.0f}s "
@@ -303,7 +300,8 @@ def run_evaluation_with_checkpoint(
     system_outputs: dict,
     evaluation_prompt: str,
     evaluation_llm,
-    checkpoint_file: Union[str, Path] = Path("checkpoints/eval_checkpoint.json"),
+    checkpoint_file: Union[str,
+                           Path] = Path("checkpoints/eval_checkpoint.json"),
     delay: float = 5,
     max_retries: int = 5,
     max_consecutive_errors: int = 3,
@@ -356,8 +354,7 @@ def run_evaluation_with_checkpoint(
         print(f"{'='*50}")
 
         consecutive_errors = 0
-        pbar = tqdm(total=len(outputs), initial=start_idx,
-                    desc=system_type)
+        pbar = tqdm(total=len(outputs), initial=start_idx, desc=system_type)
 
         try:
             for idx in range(start_idx, len(outputs)):
@@ -368,14 +365,19 @@ def run_evaluation_with_checkpoint(
                     reference_answer=experiment["true_answer"],
                 )
                 messages = [
-                    {"role": "system",
-                     "content": "You are a fair evaluator language model."},
-                    {"role": "user", "content": eval_prompt},
+                    {
+                        "role": "system",
+                        "content": "You are a fair evaluator language model."
+                    },
+                    {
+                        "role": "user",
+                        "content": eval_prompt
+                    },
                 ]
 
                 try:
-                    eval_result = evaluate_with_retry(
-                        evaluation_llm, messages, max_retries)
+                    eval_result = evaluate_with_retry(evaluation_llm, messages,
+                                                      max_retries)
 
                     if eval_result:
                         try:
@@ -404,24 +406,24 @@ def run_evaluation_with_checkpoint(
                         # Save what we have so far
                         evaluated[system_type].append(experiment)
                         progress[system_type] = idx + 1
-                        save_checkpoint(checkpoint_file, evaluated, 0,
+                        save_checkpoint(checkpoint_file,
+                                        evaluated,
+                                        0,
                                         model_name="eval")
                         # Also save progress
-                        _save_eval_checkpoint(
-                            checkpoint_file, evaluated, progress)
+                        _save_eval_checkpoint(checkpoint_file, evaluated,
+                                              progress)
                         pbar.close()
                         raise RuntimeError(
                             f"Stopped: {consecutive_errors} consecutive "
                             f"errors at {system_type}[{idx}]. "
-                            f"Checkpoint saved. Re-run to resume."
-                        )
+                            f"Checkpoint saved. Re-run to resume.")
 
                 evaluated[system_type].append(experiment)
                 progress[system_type] = idx + 1
 
                 # Save checkpoint after each success
-                _save_eval_checkpoint(
-                    checkpoint_file, evaluated, progress)
+                _save_eval_checkpoint(checkpoint_file, evaluated, progress)
                 pbar.update(1)
 
                 if delay > 0:
@@ -429,8 +431,7 @@ def run_evaluation_with_checkpoint(
 
         except KeyboardInterrupt:
             progress[system_type] = idx
-            _save_eval_checkpoint(
-                checkpoint_file, evaluated, progress)
+            _save_eval_checkpoint(checkpoint_file, evaluated, progress)
             pbar.close()
             print(f"\nInterrupted. Checkpoint saved at "
                   f"{system_type}[{idx}].")
@@ -444,12 +445,12 @@ def run_evaluation_with_checkpoint(
 
     print(f"\n{'='*50}")
     print("Evaluation complete!")
-    print(f"{'='*50}")
+    print(f"{'='*50}\n")
     return evaluated
 
 
-def _save_eval_checkpoint(checkpoint_file: Union[str, Path],
-                          evaluated: dict, progress: dict) -> None:
+def _save_eval_checkpoint(checkpoint_file: Union[str, Path], evaluated: dict,
+                          progress: dict) -> None:
     """Save evaluation checkpoint with progress tracking."""
     checkpoint_file = Path(checkpoint_file)
     checkpoint_data = {
