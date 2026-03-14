@@ -1,11 +1,8 @@
-import pandas as pd
-import json
 from pathlib import Path
-from datetime import datetime
 from utils.results_manager import load_evaluation_results
 import argparse
 import matplotlib.pyplot as plt
-import seaborn as sns
+import pandas as pd
 
 
 def read_results(results_dir: str):
