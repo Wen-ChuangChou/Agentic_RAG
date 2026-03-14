@@ -1,5 +1,6 @@
 import os
 import threading
+import torch
 from concurrent.futures import ThreadPoolExecutor
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -8,7 +9,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.utils import DistanceStrategy
 from tqdm import tqdm
 from transformers import AutoTokenizer
-from typing import List, Optional
+from typing import List
 
 
 def sanitize_filename(dataset_name: str) -> str:
@@ -183,8 +184,10 @@ def load_or_create_vectordb(dataset_name: str,
 
         try:
             # Load the embedding model (needed for loading)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
             embedding_model = HuggingFaceEmbeddings(
-                model_name="thenlper/gte-small")
+                model_name="thenlper/gte-small",
+                model_kwargs={"device": device})
 
             # Load the existing vectordb
             vectordb = FAISS.load_local(vectordb_path,
@@ -241,7 +244,9 @@ def load_or_create_vectordb(dataset_name: str,
 
     # Create embedding model
     print("Loading embedding model...")
-    embedding_model = HuggingFaceEmbeddings(model_name="thenlper/gte-small")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    embedding_model = HuggingFaceEmbeddings(model_name="thenlper/gte-small",
+                                            model_kwargs={"device": device})
 
     # Create vectordb with batch processing
     vectordb = batch_embed_documents(docs_processed, embedding_model,
