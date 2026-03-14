@@ -8,28 +8,44 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
-def read_results(results_dir: str, eval_performance_filename: str):
+def read_results(results_dir: str):
     """
-    Read evaluation results from a JSON file.
+    Read evaluation results from all JSON files in the specified directory.
 
     Args:
         results_dir: Directory to load the results from.
-        eval_performance_filename: Name of the JSON file to load the results from.
     """
-    results = load_evaluation_results(results_dir, eval_performance_filename)
     all_models_scores = []
-    scores = {"model_name": results["model_name"]}
 
-    for system_type in [
-            "agentic_rag",
-            "standard_rag",
-            "standard",
-    ]:
+    # Use glob to find all files ending in .json in the results_dir
+    results_path = Path(results_dir)
+    json_files = list(results_path.glob("*.json"))
 
-        scores[system_type] = results[system_type][
-            'eval_score_LLM_judge_int'].mean() * 100
-        print(f"Average score for {system_type} : {scores[system_type]:.1f}%")
-    all_models_scores.append(scores)
+    if not json_files:
+        print(f"No JSON files found in {results_dir}")
+        return all_models_scores
+
+    for filepath in json_files:
+        # load_evaluation_results handles the specific filename
+        results = load_evaluation_results(results_dir, filepath.name)
+
+        # We only want to process valid files with 'model_name'
+        if "model_name" not in results:
+            continue
+
+        scores = {"model_name": results["model_name"]}
+
+        for system_type in [
+                "agentic_rag",
+                "standard_rag",
+                "standard",
+        ]:
+            if system_type in results:
+                scores[system_type] = results[system_type][
+                    'eval_score_LLM_judge_int'].mean() * 100
+
+        print(f"Processed: {scores['model_name']}\n")
+        all_models_scores.append(scores)
 
     return all_models_scores
 
@@ -53,7 +69,7 @@ def plot_scores(results_dir, scores_list):
 
     # Set background to black
     plt.style.use('dark_background')
-    fig, ax = plt.subplots(figsize=(6, 8))
+    fig, ax = plt.subplots(figsize=(8, 6))
     fig.patch.set_facecolor('black')
     ax.set_facecolor('black')
 
@@ -75,7 +91,7 @@ def plot_scores(results_dir, scores_list):
     for container in ax.containers:
         for patch in container:
             current_width = patch.get_width()
-            gap = current_width * 0.05  # 5% gap
+            gap = current_width * 0.1  # 5% gap
             patch.set_width(current_width - gap)
             patch.set_x(patch.get_x() + gap / 2)
 
@@ -84,7 +100,7 @@ def plot_scores(results_dir, scores_list):
                  fontsize=14,
                  color='white',
                  pad=20)
-    ax.set_xlabel("Model Name", fontsize=14, color='white')
+    ax.set_xlabel("Model Name", fontsize=12, color='white')
 
     # Y-axis formatting to show Percentages
     ax.set_ylim(0, 105)
@@ -92,7 +108,7 @@ def plot_scores(results_dir, scores_list):
     ax.set_yticklabels(['0%', '20%', '40%', '60%', '80%', '100%'],
                        color='white',
                        fontsize=12)
-    ax.tick_params(axis='x', colors='white', labelsize=14)
+    ax.tick_params(axis='x', colors='white', labelsize=12)
 
     # Hide the y-axis label and ticks to match style more closely if desired
     # ax.set_ylabel("")
@@ -105,30 +121,31 @@ def plot_scores(results_dir, scores_list):
     # Add bar labels on top
     for container in ax.containers:
         labels = [
-            f'{v.get_height():.1f}%' if v.get_height() > 0 else ''
+            f'{v.get_height():.1f}' if v.get_height() > 0 else ''
             for v in container
         ]
         ax.bar_label(container,
                      labels=labels,
                      padding=5,
                      color='white',
-                     fontsize=12,
-                     fontweight='bold')
+                     fontsize=10,
+                     fontweight='bold',
+                     rotation=45)
 
-    # Adjust Legend
-    legend = plt.legend(title="Technique",
-                        bbox_to_anchor=(1.05, 1),
+    legend = plt.legend(title="",
+                        bbox_to_anchor=(0.88, 1.05),
                         loc='upper left',
-                        frameon=False)
+                        frameon=False,
+                        fontsize=12)
     plt.setp(legend.get_texts(), color='white')
     if legend.get_title():
         plt.setp(legend.get_title(), color='white')
 
     plt.tight_layout()
+    plt.show()
     output_path = Path(results_dir) / "evaluation_scores.png"
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     print(f"\nPlot saved to {output_path}")
-    plt.show()
 
 
 def main():
@@ -137,14 +154,11 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Show evaluation results.")
     parser.add_argument("--results_dir", type=str, default="results")
-    parser.add_argument(
-        "--filename",
-        type=str,
-        # default="eval_performance.json")
-        default="Qwen3.5 122B_vect200_t0.2.json")
 
     args = parser.parse_args()
-    all_scores = read_results(args.results_dir, args.filename)
+
+    # Now we just pass the directory to read all files rather than a single file name
+    all_scores = read_results(args.results_dir)
     plot_scores(args.results_dir, all_scores)
 
 
