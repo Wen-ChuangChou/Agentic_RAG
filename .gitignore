@@ -5,7 +5,7 @@ vectordb/
 doc/
 .gradio
 *pycache*
-.env
+.venv
 .vscode
 
 *.ipynb text eol=lf
