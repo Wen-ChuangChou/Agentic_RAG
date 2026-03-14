@@ -9,7 +9,7 @@ from smolagents import OpenAIServerModel, CodeAgent
 from smolagents.monitoring import LogLevel
 from utils.agent_tools import RetrieverTool
 from utils.blablador_helper import BlabladorChatModel
-from utils.checkpoint_runner import run_with_checkpoint, save_results, run_evaluation_with_checkpoint
+from utils.checkpoint_runner import run_with_checkpoint, run_evaluation_with_checkpoint
 from utils.results_manager import save_evaluation_results
 from utils.vectordb_utils import load_or_create_vectordb
 
@@ -239,11 +239,11 @@ print(f"{'='*50}\n")
 
 ##### save results after evaluation of LLM system performance
 meta_data = {
-    "model name": model_name,
-    "model id": model_fullname,
+    "model_name": model_name,
+    "model_id": model_fullname,
     "prompt_filename": prompt_filename,
-    "eval model name": eval_model_name,
-    "eval model id": eval_model_fullname,
+    "eval_model_name": eval_model_name,
+    "eval_model_id": eval_model_fullname,
 }
 
 eval_performance_filename = f"{model_name}_vect{config['text_chunk_size']}_t{TEMPERATURE}.json"

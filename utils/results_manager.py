@@ -58,6 +58,6 @@ def load_evaluation_results(results_dir: str, eval_performance_filename: str):
         f"Successfully loaded results from: {Path(results_dir) / eval_performance_filename}"
     )
     print(
-        f"Evaluation results for systems implementing model: {json_results['model name']}"
+        f"Evaluation results for systems implementing model: {json_results['model_name']}\n"
     )
     return loaded_results
