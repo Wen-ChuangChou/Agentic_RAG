@@ -1,39 +1,7 @@
 """
 General-purpose checkpoint runner for LLM evaluation.
-
-Supports both agentic RAG and vanilla LLM testing with automatic
-checkpoint/resume on API failures or interruptions.
-
-Usage:
-    from pathlib import Path
-    from utils.checkpoint_runner import run_with_checkpoint
-
-    CHECKPOINTS_DIR = Path("checkpoints")
-
-    # Agentic RAG
-    def agentic_answer(question):
-        enhanced = prompt_config["prompt"].format(question=question)
-        return agent.run(enhanced)
-
-    results = run_with_checkpoint(
-        eval_dataset, agentic_answer,
-        checkpoint_file=CHECKPOINTS_DIR / "agentic_rag_qwen35.json",
-        model_name="Qwen3.5 122B",
-        prompt_name="guide_agent_system_prompt",
-    )
-
-    # Vanilla LLM
-    def vanilla_answer(question):
-        return llm.complete(question)
-
-    results = run_with_checkpoint(
-        eval_dataset, vanilla_answer,
-        checkpoint_file=CHECKPOINTS_DIR / "vanilla_qwen35.json",
-        model_name="Qwen3.5 122B",
-        prompt_name="none",
-    )
+Provides functions for running evaluations with atomic checkpointing and retry logic.
 """
-
 import json
 import time
 from datetime import datetime
@@ -48,7 +16,16 @@ def save_checkpoint(checkpoint_file: Union[str, Path],
                     next_idx: int,
                     model_name: str = "unknown",
                     prompt_name: str = "unknown") -> None:
-    """Save checkpoint data to file using atomic write to prevent corruption."""
+    """
+    Save checkpoint data to file using atomic write to prevent corruption.
+    
+    Args:
+        checkpoint_file: Path to the JSON checkpoint file.
+        results: List of processed results.
+        next_idx: Index of the next item to process in the dataset.
+        model_name: Identifier for the model being evaluated.
+        prompt_name: Identifier for the prompt configuration used.
+    """
     checkpoint_file = Path(checkpoint_file)
     checkpoint_data = {
         "model_name": model_name,
@@ -71,7 +48,15 @@ def save_checkpoint(checkpoint_file: Union[str, Path],
 
 
 def load_checkpoint(checkpoint_file: Union[str, Path]) -> dict:
-    """Load checkpoint data from file. Returns empty dict if not found."""
+    """
+    Load checkpoint data from a JSON file.
+
+    Args:
+        checkpoint_file: Path to the checkpoint file.
+
+    Returns:
+        A dictionary containing checkpoint state, or empty dict if not found.
+    """
     checkpoint_file = Path(checkpoint_file)
     if not checkpoint_file.exists():
         return {}
@@ -188,18 +173,13 @@ def run_with_checkpoint(
 def save_results(results_file: Union[str, Path], system_type: str,
                  outputs: list) -> None:
     """
-    Save one agent's generated results to a shared JSON file.
-
-    Each agent's outputs are stored under its system_type key.
-    Previously saved results for other agents are preserved.
+    Save specific system results to a shared JSON results file.
+    Does not overwrite results from other systems.
 
     Args:
-        results_file: Path (or str) to the shared JSON results file.
-        system_type: Key name, e.g. "agentic_rag", "standard_rag",
-                     or "standard".
-        outputs: List of result dicts (same format as run_with_checkpoint
-                 output: question, true_answer, source_doc,
-                 generated_answer).
+        results_file: Path to the shared JSON file.
+        system_type: Label for the system (e.g., 'agentic_rag').
+        outputs: List of result dictionaries.
     """
     results_file = Path(results_file)
 
@@ -224,11 +204,14 @@ def save_results(results_file: Union[str, Path], system_type: str,
 
 def load_results(results_file: Union[str, Path]) -> dict:
     """
-    Load all agents' results from a shared JSON file.
+    Load all system results from a shared JSON results file.
+
+    Args:
+        results_file: Path to the JSON results file.
 
     Returns:
-        Dict keyed by system_type, each value is a list of result dicts.
-        Returns empty dict if file doesn't exist.
+        A dictionary where keys are system types and values are lists of results.
+        Returns an empty dictionary if the file does not exist or is invalid.
     """
     results_file = Path(results_file)
     if not results_file.exists():
@@ -248,7 +231,10 @@ def load_results(results_file: Union[str, Path]) -> dict:
 
 
 def _extract_retry_delay(error_message: str) -> float | None:
-    """Extract retry delay from API error message (e.g. 'retry in 26.2s')."""
+    """
+    Extract retry delay (in seconds) from an API error message.
+    Example: 'rate limit exceeded, retry in 26.2s'
+    """
     import re
     match = re.search(r'retry in ([\d.]+)s', str(error_message))
     if match:
@@ -257,7 +243,10 @@ def _extract_retry_delay(error_message: str) -> float | None:
 
 
 def _is_retryable_error(error_str: str) -> bool:
-    """Check if the error is retryable (rate limit or service unavailable)."""
+    """
+    Determine if a given error message indicates a condition
+    that should be retried (e.g., rate limits, service down).
+    """
     retryable_codes = ["429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"]
     return any(code in error_str for code in retryable_codes)
 
@@ -266,10 +255,16 @@ def evaluate_with_retry(evaluation_llm,
                         messages: list,
                         max_retries: int = 5) -> str | None:
     """
-    Call evaluation_llm.generate() with automatic retry on transient errors
-    (429 rate limit AND 503 service unavailable).
+    Generate an evaluation response using the LLM with automatic retry logic.
+    Retries on transient errors like rate limits (429) or service outages (503).
 
-    If all retries are exhausted, raises the exception (does NOT skip).
+    Args:
+        evaluation_llm: The LLM instance used for evaluation.
+        messages: List of chat messages for the model.
+        max_retries: Maximum number of retry attempts.
+
+    Returns:
+        The content of the generated response, or None if evaluation failed.
     """
     for attempt in range(max_retries):
         try:
@@ -451,7 +446,14 @@ def run_evaluation_with_checkpoint(
 
 def _save_eval_checkpoint(checkpoint_file: Union[str, Path], evaluated: dict,
                           progress: dict) -> None:
-    """Save evaluation checkpoint with progress tracking."""
+    """
+    Save evaluation progress to a checkpoint file.
+
+    Args:
+        checkpoint_file: Path to the JSON checkpoint file.
+        evaluated: Dictionary containing results evaluated so far.
+        progress: Dictionary tracking the current index for each system.
+    """
     checkpoint_file = Path(checkpoint_file)
     checkpoint_data = {
         "results": evaluated,
