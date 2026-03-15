@@ -3,9 +3,10 @@ dev/
 checkpoints/
 vectordb/
 doc/
+.venv/
 .gradio
 *pycache*
-.venv
+.env
 .vscode
 
 *.ipynb text eol=lf

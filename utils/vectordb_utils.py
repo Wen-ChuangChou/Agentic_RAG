@@ -5,7 +5,7 @@ import torch
 from concurrent.futures import ThreadPoolExecutor
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.utils import DistanceStrategy
 from tqdm import tqdm
@@ -244,8 +244,8 @@ def load_or_create_vectordb(dataset_name: str,
     print(f"Final document count after deduplication: {len(docs_processed)}")
 
     # Create embedding model
-    print("Loading embedding model...")
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device} to load embedding model...")
     embedding_model = HuggingFaceEmbeddings(model_name="thenlper/gte-small",
                                             model_kwargs={"device": device})
 
