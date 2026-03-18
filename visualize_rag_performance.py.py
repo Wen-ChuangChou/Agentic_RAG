@@ -1,3 +1,14 @@
+"""
+This script loads and visualizes evaluation results from JSON files in a results directory.
+
+It compares the performance of different RAG (Retrieval-Augmented Generation) systems:
+- Agentic RAG: Uses an agentic approach for question answering.
+- Standard RAG: Uses a standard retrieval-augmented approach.
+- Vanilla LLM: The model's baseline performance without retrieval.
+
+The results are loaded from JSON files, and a bar chart is generated showing the 
+mean evaluation scores (percentage) as judged by an LLM judge.
+"""
 from pathlib import Path
 from utils.results_manager import load_evaluation_results
 import argparse
@@ -66,7 +77,7 @@ def plot_scores(results_dir, scores_list):
 
     # Set background to black
     plt.style.use('dark_background')
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(max(8, len(df) * 2.2), 6))
     fig.patch.set_facecolor('black')
     ax.set_facecolor('black')
 
