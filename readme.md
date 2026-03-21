@@ -1,103 +1,176 @@
 # **Agentic Retrieval-Augmented-Generation (RAG): AI Agent for self-query and query reformulation**
 
-## **Project Objective**
+## **Project Description**
 
-To implement and evaluate Agentic Retrieval Augmented Generation (RAG), comparing its performance against traditional RAG and standalone Large Language Models (LLMs) in answering technical questions related to Hugging Face ecosystem packages.
+This project implements and evaluates **Agentic Retrieval-Augmented Generation (RAG)**, comparing its performance against traditional RAG and standalone Large Language Models (LLMs) when answering technical questions about the Hugging Face ecosystem.
 
-# **Motivation**
+While traditional RAG systems are powerful, they follow a fixed retrieve-then-generate pattern. This project goes further by introducing an **agent-based approach** that enables dynamic decision-making, iterative query refinement, and adaptive tool use — addressing core limitations of basic RAG when dealing with complex or multi-step queries. The agent intelligently interacts with external knowledge sources, evaluates retrieved content, and refines its strategy based on outcomes, resulting in more accurate, robust, and contextually rich answers. This repository leverages the [smolagents](https://github.com/huggingface/smolagents) package to build the underlying agentic framework.
 
-The primary motivation behind this project is to explore and demonstrate the advanced capabilities of RAG by incorporating intelligent agents.  
-Traditional RAG systems, while powerful, often follow a fixed retrieve-then-generate pattern. This project aims to move beyond that by showcasing how an agent-based approach can introduce more dynamic decision-making, iterative refinement, and tool utilization into the RAG pipeline. By implementing an agentic framework, we seek to address the limitations of basic RAG, such as handling complex, multi-step queries or adapting to diverse information retrieval needs.  
-The implementation focuses on creating an agent that can intelligently interact with external knowledge sources, evaluate retrieved content, and refine its approach based on the outcome, ultimately leading to more accurate, robust, and contextually rich responses from the Large Language Model.
+### **Key Capabilities**
 
-## **Instructions**
+| Capability | Description |
+|---|---|
+| **Query Strategy & Refinement** | Strategically determines and combines keywords for search queries, iteratively refining them based on retrieval results to optimize relevance and coverage. |
+| **Iterative Query Refinement** | If initial retrieval is insufficient, the agent reformulates queries or expands the number of retrieved documents. |
+| **Document Evaluation** | Assesses the relevance and quality of retrieved information relative to the question before generating an answer. |
+| **Multi-step Reasoning** | Chains together multiple retrieval and generation steps to answer complex questions. |
+| **Self-Correction & Backtracking** | If a generated answer is unsatisfactory, the agent devises and executes alternative retrieval strategies. |
 
-To demonstrate the results and run the Agentic RAG system, follow these steps:
+## **Installation**
 
-1.  **Open the Notebook**: Launch the `agentic_RAG.ipynb` notebook in a Jupyter environment (e.g., Jupyter Lab, Jupyter Notebook, VS Code with Jupyter extension, or Google Colab).
-2.  **Install Dependencies**: Ensure all necessary Python packages are installed. You can usually install them by running `pip install -r requirements.txt`.
-3.  **Set Up Environment Variables**: Make sure your `Gemini_API_KEY` is set as an environment variable in a `.env` file or directly in your notebook.
-4.  **Run All Cells**: Execute all cells in the `agentic_RAG.ipynb` notebook sequentially. This will:
-    *   Load and preprocess the dataset.
-    *   Create or load the vector database.
-    *   Initialize and run the Agentic RAG, Standard RAG, and standalone LLM evaluations.
-    *   Save the evaluation results to a JSON file in the `results` directory.
-    *   Print the average accuracy scores for each system.
+### **Prerequisites**
 
-The notebook is designed to handle checkpointing for the agentic RAG evaluation, allowing you to resume if interruptions occur.
+- Python **3.12+**
+- A [Gemini API key](https://aistudio.google.com/app/apikey) (free tier available) or [Blablador API key](https://helmholtz-blablador.fz-juelich.de/)
+- Git
 
-## **Key Capabilities of This Agentic RAG Implementation**
+### **Steps**
 
-*   **Query Strategy & Refinement:** Strategically determines and combines keywords for search queries, iteratively refining them based on retrieval results to optimize relevance and coverage.
-*   **Iterative Query Refinement:** If initial retrieval is insufficient, an agent can reformulate queries or increase the number of documents it can retrieve.
-*   **Document Evaluation:** Assess the relevance and quality of retrieved information to answer the question.
-*   **Multi-step Reasoning:** Use retrieved information to answer questions by chaining together multiple retrieval and generation steps.
-*   **Self-Correction & Backtracking:** If a generated answer is unsatisfactory, an agent can devise new strategies to try a different approach.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/Wen-ChuangChou/Agentic_RAG.git
+   cd Agentic_RAG
+   ```
 
-Agentic RAG significantly enhances the RAG pipeline, providing more sophisticated reasoning, planning, and execution capabilities for robustly handling complex information-seeking tasks. This repository leverages the smolagent package to build the underlying agentic framework.
+2. **Create and activate a virtual environment** *(recommended)*
+   ```bash
+   python -m venv venv
+   # Windows
+   venv\Scripts\activate
+   # macOS / Linux
+   source venv/bin/activate
+   ```
 
-## **Parallel Vector Database Creation with Optimized Document Processing**
+3. **Install dependencies**
+   ```bash
+   pip install -r requirement.txt
+   ```
 
-This implementation employs an **optimized parallel processing approach** for creating vector databases from extensive document collections. For this project, it specifically utilizes the database, which contains information on packages developed by Hugging Face. This technique integrates several performance optimization strategies:
+4. **Configure your API key**
 
-### **Key Features**
+   Create a `.env` file in the project root and add:
+   ```env
+   GEMINI_API_KEY=your_api_key_here
+   Blablador_API_KEY=your_api_key_here
+   ```
 
-*   **Parallel Document Splitting**: Documents are processed concurrently using ThreadPoolExecutor, splitting the workload across multiple threads to significantly reduce processing time for large datasets.
-*   **Batch Embedding**: Instead of embedding documents one at a time, the system processes documents in configurable batches (default 100), creating initial FAISS vectorstores and then merging them incrementally to manage memory usage efficiently.
-*   **Thread-Safe Processing**: Uses a custom DocumentProcessor class with threading locks to ensure safe concurrent access to the text splitter, preventing race conditions during parallel execution.
-*   **Intelligent Fallback**: Automatically falls back to sequential processing if parallel execution fails, ensuring robustness across different environments and dataset sizes.
-*   **Deduplication**: Removes duplicate documents based on content hash to optimize storage and retrieval performance.
-*   **Persistent Caching**: Saves and loads pre-built vector databases to disk, avoiding expensive recomputation on subsequent runs unless explicitly forced to rebuild.
+---
 
-### **Technical Implementation**
+## **Usage**
 
-*   Uses HuggingFace's gte-small model for embeddings with tokenizer-aware text splitting
-*   Implements FAISS with cosine distance for efficient similarity search
-*   Configurable chunk sizes (tokens) and overlap for optimal retrieval granularity
-*   Progress tracking with tqdm for long-running operations
-*   Sanitized file naming for cross-platform compatibility
+There are three main scripts to run the evaluation pipeline and visualize the results.
 
-This approach is particularly effective for large-scale RAG applications where document preprocessing time is a bottleneck, providing significant speedup while maintaining retrieval quality.
+---
+
+### 1. Run the Evaluation — `agentic_rag.py`
+
+This is the core script. It evaluates and compares three QA systems (Agentic RAG, Standard RAG, and Vanilla LLM) on the [Hugging Face technical Q&A dataset](https://huggingface.co/datasets/m-ric/huggingface_doc_qa_eval), using an LLM-as-judge for scoring. Results are saved as JSON files in the `results/` directory, and checkpoints are written to `checkpoints/` so long runs can be safely resumed.
+
+```bash
+python agentic_rag.py
+```
+
+**What it does:**
+- Builds (or loads from cache) a FAISS vector database from the Hugging Face documentation corpus
+- Runs Agentic RAG, Standard RAG, and Vanilla LLM inference on the evaluation dataset
+- Scores each answer with an LLM judge and saves results to `results/<model_name>_vect<chunk_size>_t<temperature>.json`
+
+> The model name and chunk size are configurable inside `main()` via the `config` dictionary and the `model_name` variable.
+
+**Vector database pipeline** (`utils/vectordb_utils.py`):
+
+| Feature | Detail |
+|---|---|
+| **Parallel splitting** | Documents split concurrently via `ThreadPoolExecutor` for large-scale speed-up |
+| **Batch embedding** | Embeds in configurable batches (default 100), merging FAISS shards incrementally to manage memory |
+| **Thread-safe processing** | `DocumentProcessor` uses threading locks to prevent race conditions |
+| **Intelligent fallback** | Automatically falls back to sequential processing if parallel execution fails |
+| **Deduplication** | Removes duplicate documents by content hash before indexing |
+| **Persistent caching** | Saves/loads the FAISS index from `vectordb/` to skip expensive recomputation on repeat runs |
+
+> [!TIP]
+> **Use a GPU to create the vector store.** Embedding generation is heavily compute-bound: on this dataset a GPU completes the full build in **~14 seconds** (H100), while a CPU takes **more than 23 minutes** (AMD 5600x). If a GPU is available, ensure your `torch` installation is CUDA-enabled — the pipeline will use it automatically.
+
+---
+
+### 2. Visualize Performance Scores — `visualize_rag_performance.py`
+
+Generates a grouped bar chart comparing the mean accuracy (%) of Agentic RAG, Standard RAG, and Vanilla LLM across all JSON result files found in the results directory. The plot is saved as `evaluation_scores.png`.
+
+```bash
+python visualize_rag_performance.py
+# or specify a custom results directory:
+python visualize_rag_performance.py --results_dir path/to/results
+```
+
+**Output:** `results/evaluation_scores.png`
+
+---
+
+### 3. Visualize Score Distribution — `visualize_correct_portion.py`
+
+Generates a stacked bar chart showing the proportion of **Correct**, **Partially correct**, and **Wrong** answers for each system type and model. This gives a richer view of answer quality beyond simple accuracy. The plot is saved as `score_distribution.png`.
+
+```bash
+python visualize_correct_portion.py
+# or specify a custom results directory:
+python visualize_correct_portion.py --results_dir path/to/results
+```
+
+**Output:** `results/score_distribution.png`
+
+---
+
+## **Project Structure**
+
+```
+RAG_paper/
+│
+├── agentic_rag.py                  # Main evaluation script (Agentic RAG, Standard RAG, Vanilla LLM)
+├── visualize_rag_performance.py    # Grouped bar chart of mean accuracy scores
+├── visualize_correct_portion.py    # Stacked bar chart of score distribution
+├── requirement.txt                 # Python dependencies
+├── .env                            # API keys (not tracked by git)
+│
+├── utils/                          # Helper modules
+│   ├── agent_tools.py              # RetrieverTool for the smolagents CodeAgent
+│   ├── blablador_helper.py         # Blablador LLM API wrapper
+│   ├── checkpoint_runner.py        # Checkpointing logic for long evaluations
+│   ├── results_manager.py          # Save / load evaluation results to JSON
+│   └── vectordb_utils.py           # FAISS vector database creation & caching (gte-small embeddings, cosine distance, parallel splitting, persistent cache)
+│
+├── prompts/                        # YAML prompt templates
+│   ├── gemini_agent_system_prompt.yaml
+│   ├── guide_agent_system_prompt.yaml
+│   └── evaluation_prompt.yaml
+│
+├── results/                        # Evaluation outputs (JSON + plots)
+│   ├── *.json                      # Per-model evaluation results
+│   ├── evaluation_scores.png       # Grouped bar chart
+│   └── score_distribution.png      # Stacked bar chart
+│
+├── checkpoints/                    # Intermediate checkpoints for resumable runs
+├── vectordb/                       # Cached FAISS vector database
+└── doc/                            # Additional documentation assets
+```
+
+
 
 ## **Results**
 
-Performance was evaluated using the [Hugging Face technical Q&A dataset](https://huggingface.co/datasets/m-ric/huggingface_doc_qa_eval) with Gemini 1.5, Gemini 2.0, and Gemini 2.5 LLMs. Agentic RAG consistently demonstrated superior accuracy compared to Standard RAG across all models. The relative performance trends among the different LLMs remained consistent between Agentic RAG and Standard RAG implementations. As expected, standalone LLM models generally exhibited lower accuracy, with Gemini 1.5 showing the most significant performance deficit. Gemini 2.0 was specifically utilized to evaluate the consistency of generated answers against the ground truth in the [Hugging Face technical Q&A dataset](https://huggingface.co/datasets/m-ric/huggingface_doc_qa_eval).
+Performance was evaluated using the [Hugging Face technical Q&A dataset](https://huggingface.co/datasets/m-ric/huggingface_doc_qa_eval). The results demonstrate that the Agentic RAG approach consistently outperforms standard RAG and standalone LLMs.
 
+### **Performance Comparison**
 
-<div align="center">
-  <table>
-    <thead>
-      <tr>
-        <th align="center">Model</th>
-        <th align="center">Agentic RAG</th>
-        <th align="center">Standard RAG</th>
-        <th align="center">LLM Only</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td align="center">Gemini-1.5-flash</td>
-        <td align="center">91.5%</td>
-        <td align="center">85.4%</td>
-        <td align="center">35.4%</td>
-      </tr>
-      <tr>
-        <td align="center">Gemini-2.0-flash</td>
-        <td align="center">90.8%</td>
-        <td align="center">85.4%</td>
-        <td align="center">64.1%</td>
-      </tr>
-      <tr>
-        <td align="center">Gemini-2.5-flash</td>
-        <td align="center">90.8%</td>
-        <td align="center">86.2%</td>
-        <td align="center">63.8%</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
+![Evaluation Scores](pics/evaluation_scores.png)
 
-<p align="center"><b>All values above are accuracy scores (in %)</b></p>
+The chart above shows that **Agentic RAG performance is consistently better than standard RAG and Vanilla LLM** across all evaluated LLMs.
+
+### **Score Distribution and Model Strength**
+
+![Score Distribution](pics/score_distribution.png)
+
+The score distribution highlights that stronger models, such as **Qwen 3.5**, not only answer more questions correctly but also retrieve more accurate answers, resulting in fewer "partially correct" responses compared to other models.
 
 ## **Improvement**
 
@@ -109,4 +182,5 @@ Future improvements for this project include:
 
 ## **Reference:**
 
-This repository is extended from the work of the [Hugging Face Agentic RAG Cookbook](https://huggingface.co/learn/cookbook/agent_rag).
+1. [Hugging Face Agentic RAG Cookbook](https://huggingface.co/learn/cookbook/agent_rag).
+2. [Blablador](https://helmholtz-blablador.fz-juelich.de/)
