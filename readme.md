@@ -6,6 +6,8 @@ This project implements and evaluates **Agentic Retrieval-Augmented Generation (
 
 While traditional RAG systems are powerful, they follow a fixed retrieve-then-generate pattern. This project goes further by introducing an **agent-based approach** that enables dynamic decision-making, iterative query refinement, and adaptive tool use — addressing core limitations of basic RAG when dealing with complex or multi-step queries. The agent intelligently interacts with external knowledge sources, evaluates retrieved content, and refines its strategy based on outcomes, resulting in more accurate, robust, and contextually rich answers. This repository leverages the [smolagents](https://github.com/huggingface/smolagents) package to build the underlying agentic framework.
 
+![RAG_vs_Agentic_RAG](pics/RAG_vs_Agnetic.jpeg)
+
 ### **Key Capabilities**
 
 | Capability | Description |
@@ -183,4 +185,4 @@ Future improvements for this project include:
 ## **Reference:**
 
 1. [Hugging Face Agentic RAG Cookbook](https://huggingface.co/learn/cookbook/agent_rag).
-2. [Blablador](https://helmholtz-blablador.fz-juelich.de/)
+2. [Blablador](https://helmholtz-blablador.fz-juelich.de/).
