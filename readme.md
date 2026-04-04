@@ -174,13 +174,15 @@ The chart above shows that **Agentic RAG performance is consistently better than
 
 The score distribution highlights that stronger models, such as **Qwen 3.5**, not only answer more questions correctly but also retrieve more accurate answers, resulting in fewer "partially correct" responses compared to other models.
 
-## **Improvement**
+## **Future Improvements**
 
-Future improvements for this project include:
+To further enhance the performance, efficiency, and security of this Agentic RAG system, the following areas are identified for future development:
 
-1.  Broaden LLM Evaluation: Expand testing to include a wider variety of LLMs or different agentic RAG architectural patterns (e.g., integrating various tools, multi-agent systems) to assess generalizability and identify optimal configurations.
-2.  Refine Agent Prompting: Enhance the system prompts to more precisely guide agent behavior, leading to increased efficiency and better alignment with desired task execution.
-3.  Enhance Objective Evaluation Criteria: Develop more rigorous system prompts for evaluating LLM responses, ensuring objectivity, especially concerning conciseness and directness. Responses that are overly verbose or contain extraneous information, even if partially correct, should be scored down appropriately.
+1. **Comprehensive Agent Telemetry** : System prompts are a critical factor in agentic performance. Implementing a robust telemetry system would allow for granular monitoring of agent behavior, enabling systematic comparison of different system prompts and reasoning patterns to identify the most effective configurations.
+
+2. **Self-Refining Agent Prompting via Reinforcement Learning** : Leveraging Reinforcement Learning (RL) to allow an agent to iteratively refine its own system prompts. The goal is to optimize for factual accuracy while ensuring the agent maintains its existing capabilities. This approach can lead to more efficient retrieval strategies, reducing the number of necessary steps and improving alignment with complex task requirements.
+
+3. **Private LLM Serving with vLLM** : Transitioning from external APIs (like Gemini or Blablador) to local or private HPC-hosted models using **vLLM**. This would significantly improve inference speeds and, more importantly, ensure data privacy by keeping sensitive database information within a secure, private GPU computing cluster—a crucial requirement for production-grade applications.
 
 ## **Reference:**
 
