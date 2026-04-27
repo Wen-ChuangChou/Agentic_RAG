@@ -8,6 +8,7 @@ The evaluation is performed using a Hugging Face dataset and an LLM-as-judge for
 It uses checkpointing to allow resuming long-running evaluations.
 """
 import os
+import time
 import datasets
 import pandas as pd
 import yaml
@@ -130,7 +131,7 @@ def main():
     # Initialize LLM via Blablador
     API_KEY = os.getenv("Blablador_API_KEY")
     LLM_helper = BlabladorChatModel(api_key=API_KEY)
-    model_name = "Qwen3.5 122B"  # Options: Qwen3.5 122B, MiniMax-M2.5, NVIDIA-Nemotron
+    model_name = "Qwen3.6-35B-A3B"  # Options: Qwen3.5-122B, MiniMax-M2.7
     model_fullname = LLM_helper.get_model_fullname(model_name)
     print(f"The agentic RAG uses the following model: {model_fullname}\n")
 
@@ -161,38 +162,44 @@ def main():
     print(
         f"Evaluating agentic RAG performance using model: {model_fullname}\n")
 
+    timing = {}
+
     # 1. Evaluate Agentic RAG
     llm_outputs = {}
-    llm_outputs["agentic_rag"] = run_with_checkpoint(
-        eval_dataset,
-        lambda q: agentic_answer(q, agent, prompt_config),
-        checkpoint_file=CHECKPOINTS_DIR / f"{model_name}_agentic_rag.json",
-        model_name=model_fullname,
-        prompt_name="guide_agent_system_prompt",
-    )
+    llm_outputs["agentic_rag"], timing[
+        "agentic_rag_seconds"] = run_with_checkpoint(
+            eval_dataset,
+            lambda q: agentic_answer(q, agent, prompt_config),
+            checkpoint_file=CHECKPOINTS_DIR / f"{model_name}_agentic_rag.json",
+            model_name=model_fullname,
+            prompt_name="guide_agent_system_prompt",
+        )
 
     print(f"\n{'='*50}")
-    print("Agentic RAG evaluation completed.")
+    print(
+        f"Agentic RAG evaluation completed in {timing['agentic_rag_seconds']}s."
+    )
     print(f"{'='*50}\n")
 
     # 2. Evaluate Standard RAG
     print(
         f"Evaluating standard RAG performance using model: {model_fullname}\n")
-    llm_outputs["standard_rag"] = run_with_checkpoint(
-        eval_dataset,
-        lambda q: rag_answer(q, retriever_tool, answer_llm),
-        checkpoint_file=CHECKPOINTS_DIR / f"{model_name}_rag.json",
-        model_name=model_fullname,
-        prompt_name="none",
-    )
+    llm_outputs["standard_rag"], timing[
+        "standard_rag_seconds"] = run_with_checkpoint(
+            eval_dataset,
+            lambda q: rag_answer(q, retriever_tool, answer_llm),
+            checkpoint_file=CHECKPOINTS_DIR / f"{model_name}_rag.json",
+            model_name=model_fullname,
+            prompt_name="none",
+        )
 
     print(f"\n{'='*50}")
-    print("RAG evaluation completed.")
+    print(f"RAG evaluation completed in {timing['standard_rag_seconds']}s.")
     print(f"{'='*50}\n")
 
     # 3. Evaluate Vanilla LLM
     print(f"Utilizing {model_fullname} for vanilla question answering...\n")
-    llm_outputs["standard"] = run_with_checkpoint(
+    llm_outputs["standard"], timing["vanilla_seconds"] = run_with_checkpoint(
         eval_dataset,
         lambda q: vanilla_answer(q, answer_llm),
         checkpoint_file=CHECKPOINTS_DIR / f"{model_name}_vallina.json",
@@ -201,7 +208,7 @@ def main():
     )
 
     print(f"\n{'='*50}")
-    print("Vanilla LLM evaluation completed.")
+    print(f"Vanilla LLM evaluation completed in {timing['vanilla_seconds']}s.")
     print(f"{'='*50}\n")
 
     # Setup LLM-as-judge for results evaluation
@@ -222,7 +229,7 @@ def main():
         temperature=0)
 
     # Perform evaluation of all system outputs
-    evaluated = run_evaluation_with_checkpoint(
+    evaluated, timing["evaluation_seconds"] = run_evaluation_with_checkpoint(
         llm_outputs,
         evaluation_prompt["prompt"],
         evaluation_llm,
@@ -231,18 +238,26 @@ def main():
         max_retries=5,
         max_consecutive_errors=3,
     )
+    timing["total_seconds"] = sum(timing.values())
 
-    # Process and clean evaluated results
+    # Process evaluated results - keep ALL rows including [FAILED] placeholders
     results = {}
     for system_type, outputs in evaluated.items():
-        df = pd.DataFrame.from_dict(outputs)
-        # Remove entries that failed with an Error message
-        results[system_type] = df.loc[~df["generated_answer"].str.
-                                      contains("Error", na=False)]
+        results[system_type] = pd.DataFrame.from_dict(outputs)
 
     # Calculate and display accuracy scores
     DEFAULT_SCORE_VAL = 2  # Average score used when scoring fails
+    scores = {}
     for system_type in ["agentic_rag", "standard_rag", "standard"]:
+        if system_type not in results:
+            print(f"Skipping '{system_type}': no evaluated results available.")
+            continue
+        df = results[system_type]
+        # [FAILED] placeholders (API errors) get score=1 (worst) directly,
+        # bypassing the LLM judge so failures count against the average.
+        failed_mask = df["generated_answer"] == "[FAILED]"
+        df.loc[failed_mask, "eval_score_LLM_judge"] = 1
+        results[system_type] = df
         # Convert text scores to numeric and normalize
         results[system_type]["eval_score_LLM_judge_int"] = (
             results[system_type]["eval_score_LLM_judge"].fillna(
@@ -254,6 +269,7 @@ def main():
 
         avg_score = results[system_type]['eval_score_LLM_judge_int'].mean(
         ) * 100
+        scores[system_type] = avg_score
         print(f"Average score for {system_type} : {avg_score:.1f}%")
 
     print(f"{'='*50}\n")
@@ -265,6 +281,8 @@ def main():
         "prompt_filename": prompt_filename,
         "eval_model_name": eval_model_name,
         "eval_model_id": eval_model_fullname,
+        "timing": timing,
+        "scores": scores,
     }
     eval_performance_filename = f"{model_name}_vect{config['text_chunk_size']}_t{TEMPERATURE}.json"
     save_evaluation_results(meta_data, results, RESULTS_DIR,

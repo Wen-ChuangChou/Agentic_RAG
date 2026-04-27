@@ -6,7 +6,7 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, List, Union
+from typing import Callable, List, Union, Tuple
 
 from tqdm import tqdm
 
@@ -15,7 +15,8 @@ def save_checkpoint(checkpoint_file: Union[str, Path],
                     results: list,
                     next_idx: int,
                     model_name: str = "unknown",
-                    prompt_name: str = "unknown") -> None:
+                    prompt_name: str = "unknown",
+                    elapsed_time: float = 0.0) -> None:
     """
     Save checkpoint data to file using atomic write to prevent corruption.
     
@@ -25,6 +26,7 @@ def save_checkpoint(checkpoint_file: Union[str, Path],
         next_idx: Index of the next item to process in the dataset.
         model_name: Identifier for the model being evaluated.
         prompt_name: Identifier for the prompt configuration used.
+        elapsed_time: Elapsed time in seconds prior to saving the checkpoint.
     """
     checkpoint_file = Path(checkpoint_file)
     checkpoint_data = {
@@ -32,6 +34,7 @@ def save_checkpoint(checkpoint_file: Union[str, Path],
         "prompt_name": prompt_name,
         "results": results,
         "next_idx": next_idx,
+        "elapsed_time": elapsed_time,
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -77,7 +80,8 @@ def run_with_checkpoint(
     model_name: str = "unknown",
     prompt_name: str = "unknown",
     delay: float = 0,
-) -> List[dict]:
+    max_retries: int = 1,
+) -> Tuple[List[dict], float]:
     """
     Run LLM evaluation with checkpointing to allow resuming from
     interruptions (API errors, rate limits, keyboard interrupt, etc.).
@@ -95,79 +99,131 @@ def run_with_checkpoint(
         delay: Seconds to wait between API calls (rate limiting).
 
     Returns:
-        List of result dicts, each containing:
-        {question, true_answer, source_doc, generated_answer}
+        Tuple containing:
+        - List of result dicts, each containing:
+          {question, true_answer, source_doc, generated_answer}
+        - Total elapsed time across all checkpoints for this run.
     """
     checkpoint_file = Path(checkpoint_file)
     results = []
     start_idx = 0
+    total_elapsed = 0.0
 
     # Load existing checkpoint if available
     checkpoint = load_checkpoint(checkpoint_file)
     if checkpoint:
         results = checkpoint.get("results", [])
         start_idx = checkpoint.get("next_idx", 0)
+        total_elapsed = checkpoint.get("elapsed_time", 0.0)
         prev_model = checkpoint.get("model_name", "unknown")
         prev_prompt = checkpoint.get("prompt_name", "unknown")
         print(
             f"Resuming from checkpoint at index {start_idx}/{len(eval_dataset)} "
-            f"({len(results)} results already processed)")
+            f"({len(results)} results already processed, {total_elapsed:.2f}s used)"
+        )
         print(f"  Previous run: model={prev_model}, prompt={prev_prompt}")
 
     if start_idx >= len(eval_dataset):
         print("All questions already processed!")
-        return results
+        return results, total_elapsed
 
     total = len(eval_dataset)
     pbar = tqdm(total=total, initial=start_idx, desc="Evaluating")
 
+    # removed t_run_start since we accumulate active time now
     try:
         for idx in range(start_idx, total):
             example = eval_dataset[idx]
             question = example["question"]
 
-            try:
-                answer = answer_fn(question)
+            for attempt in range(max_retries):
+                t_proc_start = time.time()
+                try:
+                    answer = answer_fn(question)
+                    total_elapsed += (time.time() - t_proc_start)
 
-                print(
-                    "=======================================================")
-                print(f"Question: {question}")
-                print(f"Answer: {answer}")
-                print(f'True answer: {example["answer"]}')
+                    print(
+                        "======================================================="
+                    )
+                    print(f"Question: {question}")
+                    print(f"Answer: {answer}")
+                    print(f'True answer: {example["answer"]}')
 
-                result = {
-                    "question": question,
-                    "true_answer": example["answer"],
-                    "source_doc": example["source_doc"],
-                    "generated_answer": str(answer),
-                }
-                results.append(result)
+                    result = {
+                        "question": question,
+                        "true_answer": example["answer"],
+                        "source_doc": example["source_doc"],
+                        "generated_answer": str(answer),
+                    }
+                    results.append(result)
 
-                # Save checkpoint after each successful question
-                save_checkpoint(checkpoint_file, results, idx + 1, model_name,
-                                prompt_name)
-                pbar.update(1)
+                    # Save checkpoint after each successful question
+                    save_checkpoint(checkpoint_file, results, idx + 1,
+                                    model_name, prompt_name, total_elapsed)
+                    pbar.update(1)
 
-                # Optional rate limiting
-                if delay > 0:
-                    time.sleep(delay)
+                    # Optional rate limiting
+                    if delay > 0:
+                        time.sleep(delay)
 
-            except Exception as e:
-                print(f"\nError at question {idx}: {e}")
-                save_checkpoint(checkpoint_file, results, idx, model_name,
-                                prompt_name)
-                print(f"Checkpoint saved. Re-run to resume from index {idx}.")
-                raise
+                    break  # Success, exit retry loop
+
+                except Exception as e:
+                    total_elapsed += (time.time() - t_proc_start)
+                    error_str = str(e)
+                    if _is_retryable_error(error_str):
+                        if attempt < max_retries - 1:
+                            retry_delay = _extract_retry_delay(error_str)
+                            if retry_delay is None:
+                                retry_delay = min(2**attempt * 10, 120)
+                            print(
+                                f"\nRetryable error at question {idx}: {error_str[:200]}"
+                            )
+                            print(
+                                f"Waiting {retry_delay:.0f}s (attempt {attempt + 1}/{max_retries})..."
+                            )
+                            time.sleep(retry_delay)
+                            continue
+                        else:
+                            # All retries exhausted on a persistent server-side
+                            # error (e.g. 502 Proxy Error for a specific question).
+                            # Save a placeholder so the question is marked as
+                            # failed (score = 1/worst) and the run continues.
+                            print(
+                                f"\nMax retries exhausted for question {idx}. "
+                                f"Saving as failed answer and continuing."
+                            )
+                            result = {
+                                "question": question,
+                                "true_answer": example["answer"],
+                                "source_doc": example["source_doc"],
+                                "generated_answer": "[FAILED]",
+                            }
+                            results.append(result)
+                            save_checkpoint(checkpoint_file, results, idx + 1,
+                                            model_name, prompt_name,
+                                            total_elapsed)
+                            pbar.update(1)
+                            break  # Move on to the next question
+                    else:
+                        print(f"\nNon-retryable error at question {idx}: {error_str}")
+                        save_checkpoint(checkpoint_file, results, idx,
+                                        model_name, prompt_name, total_elapsed)
+                        print(
+                            f"Checkpoint saved. Re-run to resume from index {idx}."
+                        )
+                        raise
 
     except KeyboardInterrupt:
         print(f"\nInterrupted by user at question {idx}.")
-        save_checkpoint(checkpoint_file, results, idx, model_name, prompt_name)
+        save_checkpoint(checkpoint_file, results, idx, model_name, prompt_name,
+                        total_elapsed)
         print(f"Checkpoint saved. Re-run to resume from index {idx}.")
 
     finally:
         pbar.close()
 
-    return results
+    return results, round(total_elapsed, 2)
 
 
 def save_results(results_file: Union[str, Path], system_type: str,
@@ -247,13 +303,17 @@ def _is_retryable_error(error_str: str) -> bool:
     Determine if a given error message indicates a condition
     that should be retried (e.g., rate limits, service down).
     """
-    retryable_codes = ["429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"]
+    retryable_codes = [
+        "429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE", "Connection error",
+        "Server disconnected", "timeout", "RemoteProtocolError", "502",
+        "Proxy Error"
+    ]
     return any(code in error_str for code in retryable_codes)
 
 
 def evaluate_with_retry(evaluation_llm,
                         messages: list,
-                        max_retries: int = 5) -> str | None:
+                        max_retries: int = 5) -> Tuple[str | None, float]:
     """
     Generate an evaluation response using the LLM with automatic retry logic.
     Retries on transient errors like rate limits (429) or service outages (503).
@@ -266,10 +326,15 @@ def evaluate_with_retry(evaluation_llm,
     Returns:
         The content of the generated response, or None if evaluation failed.
     """
+    active_time = 0.0
     for attempt in range(max_retries):
+        t_proc_start = time.time()
         try:
-            return evaluation_llm.generate(messages).content
+            res = evaluation_llm.generate(messages).content
+            active_time += (time.time() - t_proc_start)
+            return res, active_time
         except Exception as e:
+            active_time += (time.time() - t_proc_start)
             error_str = str(e)
 
             if _is_retryable_error(error_str):
@@ -288,7 +353,7 @@ def evaluate_with_retry(evaluation_llm,
                 print(f"\nNon-retryable error: {error_str}")
                 raise
 
-    return None
+    return None, active_time
 
 
 def run_evaluation_with_checkpoint(
@@ -300,7 +365,7 @@ def run_evaluation_with_checkpoint(
     delay: float = 5,
     max_retries: int = 5,
     max_consecutive_errors: int = 3,
-) -> dict:
+) -> Tuple[dict, float]:
     """
     Evaluate multiple systems with LLM-as-judge, with checkpointing.
 
@@ -321,8 +386,10 @@ def run_evaluation_with_checkpoint(
         max_consecutive_errors: Stop after this many consecutive failures.
 
     Returns:
-        Dict of evaluated outputs (same structure as system_outputs but
-        with eval_score_LLM_judge and eval_feedback_LLM_judge added).
+        Tuple containing:
+        - Dict of evaluated outputs (same structure as system_outputs but
+          with eval_score_LLM_judge and eval_feedback_LLM_judge added).
+        - Total elapsed time across all checkpoints for this run.
     """
     checkpoint_file = Path(checkpoint_file)
 
@@ -330,6 +397,7 @@ def run_evaluation_with_checkpoint(
     checkpoint = load_checkpoint(checkpoint_file)
     evaluated = checkpoint.get("results", {})
     progress = checkpoint.get("progress", {})
+    total_elapsed = checkpoint.get("elapsed_time", 0.0)
 
     for system_type, outputs in system_outputs.items():
         start_idx = progress.get(system_type, 0)
@@ -371,8 +439,9 @@ def run_evaluation_with_checkpoint(
                 ]
 
                 try:
-                    eval_result = evaluate_with_retry(evaluation_llm, messages,
-                                                      max_retries)
+                    eval_result, active_time = evaluate_with_retry(
+                        evaluation_llm, messages, max_retries)
+                    total_elapsed += active_time
 
                     if eval_result:
                         try:
@@ -404,10 +473,11 @@ def run_evaluation_with_checkpoint(
                         save_checkpoint(checkpoint_file,
                                         evaluated,
                                         0,
-                                        model_name="eval")
+                                        model_name="eval",
+                                        elapsed_time=total_elapsed)
                         # Also save progress
                         _save_eval_checkpoint(checkpoint_file, evaluated,
-                                              progress)
+                                              progress, total_elapsed)
                         pbar.close()
                         raise RuntimeError(
                             f"Stopped: {consecutive_errors} consecutive "
@@ -418,7 +488,8 @@ def run_evaluation_with_checkpoint(
                 progress[system_type] = idx + 1
 
                 # Save checkpoint after each success
-                _save_eval_checkpoint(checkpoint_file, evaluated, progress)
+                _save_eval_checkpoint(checkpoint_file, evaluated, progress,
+                                      total_elapsed)
                 pbar.update(1)
 
                 if delay > 0:
@@ -426,11 +497,13 @@ def run_evaluation_with_checkpoint(
 
         except KeyboardInterrupt:
             progress[system_type] = idx
-            _save_eval_checkpoint(checkpoint_file, evaluated, progress)
+            current_elapsed = total_elapsed
+            _save_eval_checkpoint(checkpoint_file, evaluated, progress,
+                                  current_elapsed)
             pbar.close()
             print(f"\nInterrupted. Checkpoint saved at "
                   f"{system_type}[{idx}].")
-            return evaluated
+            return evaluated, round(current_elapsed, 2)
 
         finally:
             pbar.close()
@@ -441,11 +514,13 @@ def run_evaluation_with_checkpoint(
     print(f"\n{'='*50}")
     print("Evaluation complete!")
     print(f"{'='*50}\n")
-    return evaluated
+    return evaluated, round(total_elapsed, 2)
 
 
-def _save_eval_checkpoint(checkpoint_file: Union[str, Path], evaluated: dict,
-                          progress: dict) -> None:
+def _save_eval_checkpoint(checkpoint_file: Union[str, Path],
+                          evaluated: dict,
+                          progress: dict,
+                          elapsed_time: float = 0.0) -> None:
     """
     Save evaluation progress to a checkpoint file.
 
@@ -453,11 +528,13 @@ def _save_eval_checkpoint(checkpoint_file: Union[str, Path], evaluated: dict,
         checkpoint_file: Path to the JSON checkpoint file.
         evaluated: Dictionary containing results evaluated so far.
         progress: Dictionary tracking the current index for each system.
+        elapsed_time: Elapsed time in seconds prior to saving the checkpoint.
     """
     checkpoint_file = Path(checkpoint_file)
     checkpoint_data = {
         "results": evaluated,
         "progress": progress,
+        "elapsed_time": elapsed_time,
         "timestamp": datetime.now().isoformat(),
     }
     checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
