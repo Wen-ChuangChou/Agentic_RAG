@@ -141,19 +141,11 @@ RAG_paper/
 │   ├── results_manager.py          # Save / load evaluation results to JSON
 │   └── vectordb_utils.py           # FAISS vector database creation & caching (gte-small embeddings, cosine distance, parallel splitting, persistent cache)
 │
-├── prompts/                        # YAML prompt templates
-│   ├── gemini_agent_system_prompt.yaml
-│   ├── guide_agent_system_prompt.yaml
-│   └── evaluation_prompt.yaml
-│
-├── results/                        # Evaluation outputs (JSON + plots)
-│   ├── *.json                      # Per-model evaluation results
-│   ├── evaluation_scores.png       # Grouped bar chart
-│   └── score_distribution.png      # Stacked bar chart
-│
-├── checkpoints/                    # Intermediate checkpoints for resumable runs
-├── vectordb/                       # Cached FAISS vector database
-└── doc/                            # Additional documentation assets
+└─ prompts/                        # YAML prompt templates
+    ├── gemini_agent_system_prompt.yaml
+    ├── guide_agent_system_prompt.yaml
+    └── evaluation_prompt.yaml
+
 ```
 
 
@@ -166,13 +158,17 @@ Performance was evaluated using the [Hugging Face technical Q&A dataset](https:/
 
 ![Evaluation Scores](pics/evaluation_scores.png)
 
-The chart above shows that **Agentic RAG performance is consistently better than standard RAG and Vanilla LLM** across all evaluated LLMs.
+Agentic RAG consistently delivers the highest accuracy across all evaluated models, outperforming Standard RAG by a clear margin and significantly surpassing Vanilla LLM. This indicates that the pipeline design (agentic workflow) has a stronger impact on performance than the choice of base model, and that single-pass retrieval (Standard RAG) is not sufficient for high-quality technical QA.
 
 ### **Score Distribution and Model Strength**
 
 ![Score Distribution](pics/score_distribution.png)
 
-The score distribution highlights that stronger models, such as **Qwen 3.5**, not only answer more questions correctly but also retrieve more accurate answers, resulting in fewer "partially correct" responses compared to other models.
+The primary advantage of Agentic RAG comes from drastically reducing incorrect answers, not just increasing partially correct ones. Compared to Standard RAG and Vanilla LLM, it shifts outcomes from “wrong” directly to “correct,” demonstrating that iterative retrieval and reasoning improve answer reliability and suppress hallucinations, rather than merely producing safer or more ambiguous responses.
+
+## Extended Project
+
+**[Private LLM Serving with vLLM](https://github.com/Wen-ChuangChou/Agentic-RAG-vLLM-inference)**: We have successfully implemented a transition from external APIs (such as Gemini or Blablador) to local, HPC-hosted models using **vLLM**. This dedicated extension significantly improves inference speeds and ensures strict data privacy by keeping sensitive information within a secure, private GPU computing cluster—a critical requirement for production-grade applications.
 
 ## **Future Improvements**
 
@@ -182,7 +178,6 @@ To further enhance the performance, efficiency, and security of this Agentic RAG
 
 2. **Self-Refining Agent Prompting via Reinforcement Learning** : Leveraging Reinforcement Learning (RL) to allow an agent to iteratively refine its own system prompts. The goal is to optimize for factual accuracy while ensuring the agent maintains its existing capabilities. This approach can lead to more efficient retrieval strategies, reducing the number of necessary steps and improving alignment with complex task requirements.
 
-3. **Private LLM Serving with vLLM** : Transitioning from external APIs (like Gemini or Blablador) to local or private HPC-hosted models using **vLLM**. This would significantly improve inference speeds and, more importantly, ensure data privacy by keeping sensitive database information within a secure, private GPU computing cluster—a crucial requirement for production-grade applications.
 
 ## **Reference:**
 
